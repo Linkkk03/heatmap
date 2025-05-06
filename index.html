@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>上海景点热力图与分类标记</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 高德地图API -->
+    <script src="https://webapi.amap.com/loader.js"></script>
+    <style>
+        html, body, #map {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .custom-marker {
+            width: 32px;
+            height: 32px;
+            background-size: cover;
+            border-radius: 50%;
+        }
+        /* 弹窗自定义样式 */
+        .amap-info-content {
+            padding: 12px !important;
+            min-width: 280px;
+            border-radius: 8px !important;
+        }
+        .info-image {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .info-title {
+            font-size: 16px;
+            margin: 6px 0;
+            color: #333;
+        }
+        .info-desc {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.6;
+            margin: 8px 0;
+        }
+        .info-weather {
+            color: #1890ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // 全局变量存储地图和热力图实例
+        let map, heatmap;
+        
+        function initMap() {
+            AMapLoader.load({
+                key: "ad2454f78dd488ab4ebe4fbf69f840fc",
+                version: "2.0",
+                plugins: ['AMap.HeatMap', 'AMap.Marker']
+            }).then((AMap) => {
+                map = new AMap.Map('map', {
+                    viewMode: '2D',
+                    center: [121.4737, 31.2304],
+                    zoom: 12
+                });
+
+                // 初始化热力图
+                initHeatmap(AMap);
+                
+                // 初始化分类标记
+                initMarkers(AMap);
+                
+                // 启动定时刷新
+                setInterval(() => refreshHeatmap(AMap), 5000);
+
+            }).catch(e => {
+                console.error("地图加载失败:", e);
+            });
+        }
+
+        function initHeatmap(AMap) {
+            // 热力图数据
+            const heatmapData = generateHeatmapData();
+            
+            // 创建热力图
+            heatmap = new AMap.HeatMap(map, {
+                radius: 40,
+                opacity: [0.6, 0.8],
+                gradient: {
+                    0.4: 'blue',
+                    0.6: 'cyan',
+                    0.7: 'lime',
+                    0.8: 'yellow',
+                    1.0: 'red'
+                },
+                zooms: [3, 18]
+            });
+            
+            heatmap.setDataSet({
+                data: heatmapData,
+                max: 100
+            });
+        }
+
+        function initMarkers(AMap) {
+            const icons = {
+                '地标景点': 'https://cdn-icons-png.flaticon.com/128/18499/18499155.png',
+                '商业休闲': 'https://cdn-icons-png.flaticon.com/128/11030/11030893.png',
+                '文化历史': 'https://cdn-icons-png.flaticon.com/128/2346/2346307.png',
+                '公共空间': 'https://cdn-icons-png.flaticon.com/128/2169/2169407.png',
+            };
+
+            const locations = [
+                { name: "外滩", lat: 31.2415, lng: 121.4904, type: "地标景点",
+                 photo: "https://unsplash.com/photos/orient-pearl-shanghai-china-taken-during-daytime-uKyzXEc2k_s?utm_content=creditShareLink&utm_medium=referral&utm_source=unsplash",
+                 desc: "上海最具代表性的滨江景观带，汇集52幢风格迥异的历史建筑群，被誉为'万国建筑博览'，夜晚灯光璀璨的黄浦江景更是不可错过。" },
+                { name: "南京路步行街", lat: 31.2356, lng: 121.4752, type: "商业休闲",
+                 photo: "https://unsplash.com/photos/people-standing-near-gray-concrete-tower-D7InODIWyK4",
+                 desc: "中国第一条商业步行街，全长1.2公里，云集百年老字号与国际品牌，霓虹灯牌与复古铛铛车交织出独特的海派商业风情。" },
+                { name: "豫园", lat: 31.2279, lng: 121.4873, type: "文化历史",
+                 photo: "https://unsplash.com/photos/a-group-of-people-walking-down-a-street-next-to-tall-buildings-hBnPklsOzgg",
+                 desc: "始建于明代的江南古典园林，园内亭台楼阁错落有致，九曲桥与湖心亭相映成趣，毗邻的城隍庙商圈更可体验传统市集文化。"},
+                { name: "上海博物馆", lat: 31.2304, lng: 121.4737, type: "文化历史",
+                 photo: "https://unsplash.com/photos/the-modern-architecture-features-a-grand-entrance-JFnwXWuCObo",
+                 desc: "中国四大博物馆之一，青铜器馆、陶瓷馆和书画馆珍藏12万件文物，建筑造型寓意'天圆地方'，展现中华五千年文明精髓。"},
+                { name: "人民广场", lat: 31.2328, lng: 121.4761, type: "公共空间",
+                 photo: "https://cdn.pixabay.com/photo/2018/07/15/23/22/prague-3540883_1280.jpg",
+                 desc: "上海地理与政治文化中心，白鸽飞舞的广场、恢弘的市政大厦与地下"城市之心"博物馆共同构成市民休闲核心区。"},
+                { name: "上海大剧院", lat: 31.2319, lng: 121.4756, type: "文化历史",
+                 photo: "https://dimg04.c-ctrip.com/images/02Y59120009dkqvkiF704_R_1080_808_Q90.jpg",
+                 desc: "水晶宫般的现代建筑杰作，弧形屋顶象征艺术之翼，常年上演歌剧、芭蕾等高端演出，夜晚玻璃幕墙流光溢彩。"},
+                { name: "田子坊", lat: 31.2076, lng: 121.4692, type: "商业休闲",
+                 photo: "https://images.unsplash.com/photo-1670222023763-4072ad0e9a8b?q=80&w=2187&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                 desc: "石库门弄堂改造的艺术街区，200余家创意店铺隐匿于红砖灰瓦之间，画廊、手作工坊与咖啡馆诠释新老上海的交融。"},
+                { name: "新天地", lat: 31.2186, lng: 121.4758, type: "商业休闲",
+                 photo: "https://images.unsplash.com/photo-1558688460-d35215366eca?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                 desc: "石库门建筑与现代商业完美融合的时尚地标，中共一大会址坐落于此，国际餐饮与奢侈品店打造高端休闲体验。"},
+                { name: "外白渡桥", lat: 31.2442, lng: 121.4911, type: "地标景点",
+                 photo: "https://plus.unsplash.com/premium_photo-1733306520547-1ffd55596459?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                 desc: "中国第一座全钢结构桥梁，百年历史见证了上海变迁，《情深深雨濛濛》等影视经典取景地，夜晚灯光勾勒铁艺之美。"},
+                { name: "上海城市规划馆", lat: 31.2341, lng: 121.4742, type: "地标景点",
+                 photo: "https://img.d-arts.cn/grab_img/e73778c35c02e635e4b15589d934d3dc1644654711.jpeg",
+                 desc: "通过巨型城市模型与数字沙盘展现上海百年变迁，顶层360度环幕影院带您穿越未来城市天际线。"},
+                { name: "云南南路美食街", lat: 31.2225, lng: 121.4793, type: "商业休闲",
+                 photo: "https://images.unsplash.com/photo-1729301919282-a86a6904c1f1?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                 desc: "百年美食一条街，小绍兴白斩鸡、鲜得来排骨年糕等老字号云集，是体验上海本帮小吃与夜市文化的绝佳去处。"},
+                { name: "思南公馆", lat: 31.2143, lng: 121.4708, type: "文化历史",
+                 photo: "https://unsplash.com/photos/a-stone-building-with-a-staircase-leading-up-to-it-eT_OIisTwPE",
+                 desc: "51栋花园洋房组成的露天建筑博物馆，郭沫若、梅兰芳等名人曾居于此，现为融合书店、画廊的文艺生活空间。"},
+                { name: "静安寺", lat: 31.2231, lng: 121.4465, type: "地标景点",
+                 photo: "https://unsplash.com/photos/an-aerial-view-of-a-city-with-tall-buildings-IOshyMMATY0?utm_content=creditShareLink&utm_medium=referral&utm_source=unsplash",
+                 desc: "沪上最古老的佛寺，金顶朱墙的宋代建筑风格与周边摩天大楼形成震撼对比，每逢法会钟鼓齐鸣香火缭绕。"},
+                { name: "南京西路商圈", lat: 31.2309, lng: 121.4598, type: "商业休闲",
+                 photo: "https://unsplash.com/photos/busy-street-scene-in-a-city-with-signs-and-vehicles-uaOvlQvECik?utm_content=creditShareLink&utm_medium=referral&utm_source=unsplash",
+                 desc: "奢侈品旗舰店林立的黄金商业带，恒隆广场、中信泰富等高端商场与历史建筑共生，展现上海国际化商业魅力。" },
+                { name: "兴业太古汇", lat: 31.2287, lng: 121.4602, type: "商业休闲",
+                 photo: "https://img1.jiemian.com/101/original/20180426/152470756562359000.jpg",
+                 desc: "融合历史建筑'查公馆'的现代商业综合体，200余家国际品牌与米其林餐厅汇聚，屋顶花园可俯瞰南京西路繁华街景。"},
+                { name: "张园", lat: 31.2254, lng: 121.4546, type: "文化历史",
+                 photo: "https://mediabluk.cnr.cn/img/cnr/CNRCDP/2022/1206/650d24374057c167030962299865535411.jpg?auth=1f4b31187191e69433549709815a38d6",
+                 desc: "上海现存规模最大的石库门建筑群，28条弄堂保存完整，改造后成为融合海派文化展览与沉浸式体验的历史街区。"},
+                { name: "马勒别墅", lat: 31.2332, lng: 121.4519, type: "文化历史",
+                 photo: "https://dimg04.c-ctrip.com/images/02Y1m12000alnsea6EF49_R_1080_808_Q90.jpg",
+                 desc: "挪威童话城堡式建筑，因女儿梦境而建的传奇私宅，尖塔彩窗与中式琉璃瓦碰撞出独特美学，现为精品酒店与餐厅。"},
+                { name: "静安雕塑公园", lat: 31.2278, lng: 121.4501, type: "公共空间",
+                 photo: "https://unsplash.com/photos/a-large-statue-in-a-park-S_5Rlr7zGUg?utm_content=creditShareLink&utm_medium=referral&utm_source=unsplash",
+                 desc: "中国首座专业雕塑公园，60余件现代艺术作品散落林荫绿地，春季樱花大道与秋季银杏景观吸引众多摄影爱好者。"},
+                { name: "大悦城", lat: 31.2396, lng: 121.4483, type: "商业休闲",
+                 photo: "https://sghimages.shobserver.com/img/catch/2022/07/29/38c83845-2c5b-45b0-8e09-5d528d493ed3.jpg",
+                 desc: "苏河湾畔的网红商业地标，屋顶摩天轮'Sky Ring'可俯瞰苏州河，二次元主题街区与潮流店铺吸引年轻消费群体。"},
+                { name: "吴江路步行街", lat: 31.2315, lng: 121.4624, type: "商业休闲",
+                 photo: "https://img1.qunarzz.com/travel/d4/1703/e8/fb4c098e92c846b5.jpg",
+                 desc: "南京西路后街的美食天堂，小杨生煎、红宝石蛋糕等网红店云集，霓虹灯牌下的烟火气展现市井上海魅力。"},
+                { name: "上海自然博物馆", lat: 31.2375, lng: 121.4583, type: "地标景点",
+                 photo: "https://ts1.tc.mm.bing.net/th/id/R-C.33ab62bfac76647e0e82ead80ac3f6bb?rik=lDCjexJoIB7OLg&riu=http%3a%2f%2fimgbdb3.bendibao.com%2fshbdb%2ftour%2f20215%2f26%2f2021526155554_31632.jpg&ehk=a6%2fPSnlFJgdQFmgMKIkw9xYTx2FrP6QMD75Qp3rbzrQ%3d&risl=&pid=ImgRaw&r=0",
+                 desc: "全球最大自然博物馆之一，10个常设展区展出1.1万余件标本，巨型马门溪龙骨架与活体养殖区最受亲子家庭喜爱。"},
+                { name: "徐家汇商圈", lat: 31.1956, lng: 121.4380, type: "商业休闲",
+                 photo: "https://ts1.tc.mm.bing.net/th/id/R-C.3a8dc33d0164cd926b00f27163e1a887?rik=Z1M8KVNIQT%2bZhw&riu=http%3a%2f%2fn.sinaimg.cn%2fsinakd20123%2f548%2fw1080h1068%2f20220114%2f4e0a-06ca544d84d4324a3914f98af4e76fea.jpg&ehk=MVnYu2ESR6srgC16LVdUpgDChSWORDbeky5XbjHUIPM%3d&risl=&pid=ImgRaw&r=0",
+                 desc: "上海西南部商业核心，港汇恒隆、美罗城等八大商场组成立体商业矩阵，空中连廊实现全天候购物体验。"},
+                { name: "上海图书馆", lat: 31.2098, lng: 121.4412, type: "公共空间",
+                 photo: "https://youimg1.c-ctrip.com/target/1007170000011vemyBA7F.jpg",
+                 desc: "年接待读者400万人次的智慧图书馆，竹林庭院与数字化阅读区并存，定期举办文化讲座与古籍特展。"},
+                { name: "龙华寺", lat: 31.1729, lng: 121.4493, type: "地标景点",
+                 photo: "https://youimg1.c-ctrip.com/target/100u190000016303d82A7.jpg",
+                 desc: "上海历史最悠久的古刹，'龙华晚钟'被誉为沪城八景之一，新春祈福与清明庙会传承千年佛教文化。"},
+                { name: "武康路历史文化街", lat: 31.2012, lng: 121.4328, type: "文化历史",
+                 photo: "https://youimg1.c-ctrip.com/target/100213000000uil6r111F.jpg",
+                 desc: "浓缩上海百年历史的'浓缩版外滩'，37处历史建筑与梧桐树影相伴，巴金故居、武康大楼诉说名人往事。"},
+                { name: "上海体育馆", lat: 31.1853, lng: 121.4376, type: "公共空间",
+                 photo: "https://ts1.tc.mm.bing.net/th/id/R-C.63f0d3b8822bfa1c91edd9620fcf9390?rik=OG7YDjt2Ga2n9w&riu=http%3a%2f%2fhot.online.sh.cn%2fimages%2fattachement%2fjpeg%2fsite1%2f20161228%2fIMGf48e3894467143288561324.jpeg&ehk=yuw%2b4XbZsXj%2bgCprX5eJ5JrnXpkx9IVW413lsOiFla0%3d&risl=&pid=ImgRaw&r=0",
+                 desc: "见证中国体育发展的'万体馆'，可容纳1.8万人的圆形穹顶建筑，现为大型演唱会与电竞赛事首选场馆。"},
+                { name: "徐汇滨江", lat: 31.1894, lng: 121.4578, type: "公共空间",
+                 photo: "https://pic1.zhimg.com/v2-da8fc47df01903f2d1af4f86e87acf55_r.jpg",
+                 desc: "黄浦江畔的'美术馆大道'，龙美术馆、油罐艺术中心与滑板公园共生，工业遗迹改造的跑步道广受市民喜爱。"},
+                { name: "衡山路酒吧街", lat: 31.2045, lng: 121.4467, type: "商业休闲",
+                 photo: "https://life.online.sh.cn/images_quote/attachement/jpg/site1/20230228/IMGfc4dd44975b962755372184.jpg",
+                 desc: "法式梧桐掩映的夜生活地标，百年别墅中的爵士酒吧与网红brunch店，展现上海小资情调的最佳代表。"},
+                { name: "上海电影博物馆", lat: 31.2087, lng: 121.4389, type: "地标景点",
+                 photo: "https://img1.qunarzz.com/travel/d6/1709/f3/e40fde32b71a9eb5.jpg",
+                 desc: "中国规模最大的电影主题博物馆，4D影院与手摇放映机体验区带您穿越百年影史，周璇等影星手稿珍贵展出。"},
+                { name: "光启公园", lat: 31.1978, lng: 121.4315, type: "公共空间",
+                 photo: "https://ts1.tc.mm.bing.net/th/id/R-C.fe740385720f1b4dfc72fec4ea943da3?rik=RjOgOX7%2fLwV0Xg&riu=http%3a%2f%2fyouimg1.c-ctrip.com%2ftarget%2ffd%2ftg%2fg6%2fM06%2f3D%2f88%2fCggYslbjwFqAUCeMAAQ3t2hE4rQ601.jpg&ehk=gYiU08pFaf%2f3xp53aJhUPA4%2fAxAoFW%2bwVkVWmKvWZgI%3d&risl=&pid=ImgRaw&r=0",
+                 desc: "明代科学家徐光启墓园改建的城市公园，欧洲几何园林与中式碑廊相映，融合科学精神与古典美学的市民休憩地。"}
+            ];
+
+            locations.forEach(loc => {
+                const iconUrl = icons[loc.type] || icons["地标景点"];
+                const content = `<div class="custom-marker" style="background-image: url('${iconUrl}')"></div>`;
+                const marker = new AMap.Marker({
+                    position: [loc.lng, loc.lat],
+                    content: content,
+                    anchor: 'bottom-center',
+                    title: loc.name,
+                });
+                marker.setMap(map);
+                marker.on('click', () => {
+                    AMap.Popup && AMap.Popup.closeAll();
+                    
+                    // 生成天气信息
+                    const weatherData = generateWeather();
+                    
+                    // 生成游玩时间
+                    const playTime = generatePlayTime();
+                    
+                    // 弹窗内容
+                    const popupContent = `
+                        <img src="${loc.photo}" class="info-image" 
+                             onerror="this.src='https://dummyimage.com/280x160/eee/999'">
+                        <div class="info-title">${loc.name}</div>
+                        <div>类型：${loc.type}</div>
+                        <div class="info-desc">${loc.desc}</div>
+                        <div class="info-weather">
+                            ${weatherData.icon} ${weatherData.text} | 温度：${weatherData.temp}℃
+                        </div>
+                        <div>预计游玩：${playTime}</div>
+                    `;
+
+                    new AMap.InfoWindow({
+                        content: popupContent,
+                        offset: new AMap.Pixel(0, -40),
+                        closeWhenClickMap: true
+                    }).open(map, marker.getPosition());
+                });
+            });
+        }
+
+        // 生成天气信息
+        function generateWeather() {
+            const weatherList = [
+                { icon: "☀️", text: "晴天（建议防晒）", min: 20, max: 30 },
+                { icon: "⛅", text: "多云（适宜出行）", min: 18, max: 28 },
+                { icon: "🌧️", text: "小雨（记得带伞）", min: 15, max: 25 },
+                { icon: "🌤️", text: "晴转多云", min: 19, max: 27 }
+            ];
+            const weather = weatherList[Math.floor(Math.random() * weatherList.length)];
+            return {
+                icon: weather.icon,
+                text: weather.text,
+                temp: (Math.random() * (weather.max - weather.min) + weather.min).toFixed(1)
+            };
+        }
+
+        // 生成游玩时间
+        function generatePlayTime() {
+            const minutesOptions = [30, 45, 60, 90, 120, 150, 180];
+            const minutes = minutesOptions[Math.floor(Math.random() * minutesOptions.length)];
+            return minutes < 60 ? 
+                `${minutes}分钟` : 
+                `${Math.floor(minutes/60)}小时${minutes%60 ? `${minutes%60}分钟` : ''}`;
+        }
+
+        function generateHeatmapData() {
+            // 这里可以模拟数据变化，实际应用中可以从服务器获取新数据
+            return [
+               { name: "外滩", lng: 121.4904, lat: 31.2415, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "南京路步行街", lng: 121.4752, lat: 31.2356, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "豫园", lng: 121.4873, lat: 31.2279, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "上海博物馆", lng: 121.4737, lat: 31.2304, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "人民广场", lng: 121.4761, lat: 31.2328, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "上海大剧院", lng: 121.4756, lat: 31.2319, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "田子坊", lng: 121.4692, lat: 31.2076, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "新天地", lng: 121.4758, lat: 31.2186, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "外白渡桥", lng: 121.4911, lat: 31.2442, value: Math.min(100, Math.floor(Math.random() * 75)) },
+    { name: "上海城市规划馆", lng: 121.4742, lat: 31.2341, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "云南南路美食街", lng: 121.4793, lat: 31.2225, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "思南公馆", lng: 121.4708, lat: 31.2143, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "静安寺", lng: 121.4465, lat: 31.2231, value: Math.min(100, Math.floor(Math.random() * 115)) },
+    { name: "南京西路商圈", lng: 121.4598, lat: 31.2309, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "兴业太古汇", lng: 121.4602, lat: 31.2287, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "张园", lng: 121.4546, lat: 31.2254, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "马勒别墅", lng: 121.4519, lat: 31.2332, value: Math.min(100, Math.floor(Math.random() * 100)) },
+    { name: "静安雕塑公园", lng: 121.4501, lat: 31.2278, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "大悦城", lng: 121.4483, lat: 31.2396, value: Math.min(100, Math.floor(Math.random() * 85)) },
+    { name: "吴江路步行街", lng: 121.4624, lat: 31.2315, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "上海自然博物馆", lng: 121.4583, lat: 31.2375, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "徐家汇商圈", lng: 121.4380, lat: 31.1956, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "上海图书馆", lng: 121.4412, lat: 31.2098, value: Math.min(100, Math.floor(Math.random() * 110)) },
+    { name: "龙华寺", lng: 121.4493, lat: 31.1729, value: Math.min(100, Math.floor(Math.random() * 75)) },
+    { name: "武康路历史文化街", lng: 121.4328, lat: 31.2012, value: Math.min(100, Math.floor(Math.random() * 110)) },
+    { name: "上海体育馆", lng: 121.4376, lat: 31.1853, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "徐汇滨江", lng: 121.4578, lat: 31.1894, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "衡山路酒吧街", lng: 121.4467, lat: 31.2045, value: Math.min(100, Math.floor(Math.random() * 120)) },
+    { name: "上海电影博物馆", lng: 121.4389, lat: 31.2087, value: Math.min(100, Math.floor(Math.random() * 100)) },
+    { name: "光启公园", lng: 121.4315, lat: 31.1978, value: Math.min(100, Math.floor(Math.random() * 100)) }
+            ].map(item => ({
+                lng: item.lng,
+                lat: item.lat,
+                count: item.value
+            }));
+        }
+
+        function refreshHeatmap(AMap) {
+            // 生成新的热力图数据
+            const newData = generateHeatmapData();
+            
+            // 更新热力图
+            heatmap.setDataSet({
+                data: newData,
+                max: 100
+            });
+            
+            console.log("热力图数据已刷新", new Date());
+        }
+
+        // 初始化地图
+        initMap();
+    </script>
+</body>
+</html>
